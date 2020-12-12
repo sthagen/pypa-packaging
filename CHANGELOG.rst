@@ -4,6 +4,40 @@ Changelog
 *unreleased*
 ~~~~~~~~~~~~
 
+No unreleased changes.
+
+20.8 - 2020-12-11
+~~~~~~~~~~~~~~~~~
+
+* Revert back to setuptools for compatibility purposes for some Linux distros (:issue:`363`)
+* Do not insert an underscore in wheel tags when the interpreter version number
+  is more than 2 digits (:issue:`372`)
+
+20.7 - 2020-11-28
+~~~~~~~~~~~~~~~~~
+
+No unreleased changes.
+
+20.6 - 2020-11-28
+~~~~~~~~~~~~~~~~~
+
+.. note:: This release was subsequently yanked, and these changes were included in 20.7.
+
+* Fix flit configuration, to include LICENSE files (:issue:`357`)
+* Make `intel` a recognized CPU architecture for the `universal` macOS platform tag (:issue:`361`)
+* Add some missing type hints to `packaging.requirements` (issue:`350`)
+
+20.5 - 2020-11-27
+~~~~~~~~~~~~~~~~~
+
+* Officially support Python 3.9 (:issue:`343`)
+* Deprecate the ``LegacyVersion`` and ``LegacySpecifier`` classes (:issue:`321`)
+* Handle ``OSError`` on non-dynamic executables when attempting to resolve
+  the glibc version string.
+
+20.4 - 2020-05-19
+~~~~~~~~~~~~~~~~~
+
 * Canonicalize version before comparing specifiers. (:issue:`282`)
 * Change type hint for ``canonicalize_name`` to return
   ``packaging.utils.NormalizedName``.

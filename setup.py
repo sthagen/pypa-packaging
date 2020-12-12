@@ -49,7 +49,7 @@ setup(
     author=about["__author__"],
     author_email=about["__email__"],
     python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*",
-    install_requires=["pyparsing>=2.0.2", "six"],  # Needed to avoid issue #91
+    install_requires=["pyparsing>=2.0.2"],  # Needed to avoid issue #91
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
@@ -64,6 +64,7 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: Implementation :: CPython",
         "Programming Language :: Python :: Implementation :: PyPy",
     ],
