@@ -1,17 +1,18 @@
 # mypy: disallow-untyped-defs=False, disallow-untyped-calls=False
 
-import time
-import re
-import os
-import sys
-import glob
-import shutil
+import contextlib
+import datetime
 import difflib
+import glob
+import os
+import re
+import shutil
+import subprocess
+import sys
 import tempfile
 import textwrap
-import datetime
-import contextlib
-import subprocess
+import time
+import webbrowser
 from pathlib import Path
 
 import nox
@@ -20,13 +21,13 @@ nox.options.sessions = ["lint"]
 nox.options.reuse_existing_virtualenvs = True
 
 
-@nox.session(python=["2.7", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "pypy", "pypy3"])
+@nox.session(python=["3.6", "3.7", "3.8", "3.9", "pypy3"])
 def tests(session):
     def coverage(*args):
         session.run("python", "-m", "coverage", *args)
 
     # Once coverage 5 is used then `.coverage` can move into `pyproject.toml`.
-    session.install("coverage<5.0.0", "pretend", "pytest", "pip>=9.0.2")
+    session.install("coverage<5.0.0", "pretend", "pytest>=6.2.0", "pip>=9.0.2")
 
     if "pypy" not in session.python:
         coverage(
@@ -35,14 +36,19 @@ def tests(session):
             "packaging/",
             "-m",
             "pytest",
-            "--strict",
+            "--strict-markers",
             *session.posargs,
         )
         coverage("report", "-m", "--fail-under", "100")
     else:
         # Don't do coverage tracking for PyPy, since it's SLOW.
         session.run(
-            "python", "-m", "pytest", "--capture=no", "--strict", *session.posargs
+            "python",
+            "-m",
+            "pytest",
+            "--capture=no",
+            "--strict-markers",
+            *session.posargs,
         )
 
 
@@ -62,6 +68,7 @@ def lint(session):
 def docs(session):
     shutil.rmtree("docs/_build", ignore_errors=True)
     session.install("furo")
+    session.install("-e", ".")
 
     variants = [
         # (builder, dest)
@@ -143,20 +150,23 @@ def release(session):
         diff = "\n".join(diff_generator)
         session.error(f"Got the wrong files:\n{diff}")
 
-    # Get back out into master.
-    session.run("git", "checkout", "-q", "master", external=True)
+    # Get back out into main.
+    session.run("git", "checkout", "-q", "main", external=True)
 
     # Check and upload distribution files.
     session.run("twine", "check", *files)
 
     # Push the commits and tag.
     # NOTE: The following fails if pushing to the branch is not allowed. This can
-    #       happen on GitHub, if the master branch is protected, there are required
+    #       happen on GitHub, if the main branch is protected, there are required
     #       CI checks and "Include administrators" is enabled on the protection.
-    session.run("git", "push", "upstream", "master", release_version, external=True)
+    session.run("git", "push", "upstream", "main", release_version, external=True)
 
     # Upload the distribution.
     session.run("twine", "upload", *files)
+
+    # Open up the GitHub release page.
+    webbrowser.open("https://github.com/pypa/packaging/releases")
 
 
 # -----------------------------------------------------------------------------
@@ -209,14 +219,14 @@ def _check_git_state(session, version_tag):
     )
     if result.stdout.rstrip() not in allowed_upstreams:
         session.error(f"git remote `upstream` is not one of {allowed_upstreams}")
-    # Ensure we're on master branch for cutting a release.
+    # Ensure we're on main branch for cutting a release.
     result = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True,
         encoding="utf-8",
     )
-    if result.stdout != "master\n":
-        session.error(f"Not on master branch: {result.stdout!r}")
+    if result.stdout != "main\n":
+        session.error(f"Not on main branch: {result.stdout!r}")
 
     # Ensure there are no uncommitted changes.
     result = subprocess.run(
