@@ -4,7 +4,13 @@ Changelog
 *unreleased*
 ~~~~~~~~~~~~
 
+No unreleased changes.
+
+21.0 - 2021-07-03
+~~~~~~~~~~~~~~~~~
+
 * `packaging` is now only compatible with Python 3.6 and above.
+* Add support for zip files in ``parse_sdist_filename`` (:issue:`429`)
 
 20.9 - 2021-01-29
 ~~~~~~~~~~~~~~~~~
@@ -79,7 +85,7 @@ No unreleased changes.
 
 * Use ``sys.implementation.name`` where appropriate for ``packaging.tags`` (:issue:`193`)
 
-* Expand upon the API provded by ``packaging.tags``: ``interpreter_name()``, ``mac_platforms()``, ``compatible_tags()``, ``cpython_tags()``, ``generic_tags()`` (:issue:`187`)
+* Expand upon the API provided by ``packaging.tags``: ``interpreter_name()``, ``mac_platforms()``, ``compatible_tags()``, ``cpython_tags()``, ``generic_tags()`` (:issue:`187`)
 
 * Officially support Python 3.8 (:issue:`232`)
 
@@ -230,7 +236,7 @@ No unreleased changes.
 15.2 - 2015-05-13
 ~~~~~~~~~~~~~~~~~
 
-* Fix an error where the arbitary specifier (``===``) was not correctly
+* Fix an error where the arbitrary specifier (``===``) was not correctly
   allowing pre-releases when it was being used.
 
 * Expose the specifier and version parts through properties on the
