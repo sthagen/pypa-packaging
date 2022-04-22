@@ -3,10 +3,18 @@ name: Linting
 on:
   pull_request:
     paths:
+      - ".github/workflows/lint.yml"
+      - ".pre-commit-config.yaml"
       - "**.py"
   push:
     paths:
+      - ".github/workflows/lint.yml"
+      - ".pre-commit-config.yaml"
       - "**.py"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -16,18 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v1
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v3
         name: Install Python
         with:
           python-version: "3.9"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade nox
+          cache: "pip"
 
       - name: Run `nox -s lint`
-        run: python -m nox -s lint
+        run: pipx run nox --error-on-missing-interpreters -s lint
 
   build:
     name: Build sdist and wheel
@@ -41,16 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
 
-      - uses: actions/setup-python@v2
-        name: Install Python
-        with:
-          python-version: "3.9"
-
-      - name: Install dependencies
-        run: python -m pip install --upgrade build
-
       - name: Build
-        run: pyproject-build
+        run: pipx run build
 
       - name: Archive files
         uses: actions/upload-artifact@v1

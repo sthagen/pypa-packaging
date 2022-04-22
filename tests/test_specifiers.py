@@ -630,6 +630,12 @@ class TestSpecifier:
         items = {str(item) for item in spec}
         assert items == set(expected_items)
 
+    def test_specifier_equal_for_compatible_operator(self):
+        assert Specifier("~=1.18.0") != Specifier("~=1.18")
+
+    def test_specifier_hash_for_compatible_operator(self):
+        assert hash(Specifier("~=1.18.0")) != hash(Specifier("~=1.18"))
+
 
 class TestLegacySpecifier:
     def test_legacy_specifier_is_deprecated(self):
@@ -812,6 +818,15 @@ class TestSpecifierSet:
         assert spec.prereleases
         assert spec.contains("1.0.dev1")
         assert not spec.contains("1.0.dev1", prereleases=False)
+
+    def test_specifier_contains_installed_prereleases(self):
+        spec = SpecifierSet("~=1.0")
+        assert not spec.contains("1.0.0.dev1", installed=True)
+        assert spec.contains("1.0.0.dev1", prereleases=True, installed=True)
+
+        spec = SpecifierSet("~=1.0", prereleases=True)
+        assert spec.contains("1.0.0.dev1", installed=True)
+        assert not spec.contains("1.0.0.dev1", prereleases=False, installed=False)
 
     @pytest.mark.parametrize(
         ("specifier", "specifier_prereleases", "prereleases", "input", "expected"),
@@ -996,3 +1011,8 @@ class TestSpecifierSet:
     )
     def test_comparison_ignores_local(self, version, specifier, expected):
         assert (Version(version) in SpecifierSet(specifier)) == expected
+
+    def test_contains_with_compatible_operator(self):
+        combination = SpecifierSet("~=1.18.0") & SpecifierSet("~=1.18")
+        assert "1.19.5" not in combination
+        assert "1.18.0" in combination
