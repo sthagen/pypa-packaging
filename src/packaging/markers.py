@@ -8,8 +8,8 @@ import platform
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from ._parser import MarkerAtom, MarkerList, Op, Value, Variable, parse_marker_expr
-from ._tokenizer import ParseExceptionError, Tokenizer
+from ._parser import MarkerAtom, MarkerList, Op, Value, Variable, parse_marker
+from ._tokenizer import ParserSyntaxError
 from .specifiers import InvalidSpecifier, Specifier
 from .utils import canonicalize_name
 
@@ -185,10 +185,11 @@ def default_environment() -> Dict[str, str]:
 
 class Marker:
     def __init__(self, marker: str) -> None:
+        # Note: We create a Marker object without calling this constructor in
+        #       packaging.requirements.Requirement. If any additional logic is
+        #       added here, make sure to mirror/adapt Requirement.
         try:
-            self._markers = _normalize_extra_values(
-                parse_marker_expr(Tokenizer(marker))
-            )
+            self._markers = _normalize_extra_values(parse_marker(marker))
             # The attribute `_markers` can be described in terms of a recursive type:
             # MarkerList = List[Union[Tuple[Node, ...], str, MarkerList]]
             #
@@ -205,11 +206,8 @@ class Marker:
             #         (<Variable('os_name')>, <Op('==')>, <Value('unix')>)
             #     ]
             # ]
-        except ParseExceptionError as e:
-            raise InvalidMarker(
-                f"Invalid marker: {marker!r}, parse error at "
-                f"{marker[e.position : e.position + 8]!r}"
-            )
+        except ParserSyntaxError as e:
+            raise InvalidMarker(str(e)) from e
 
     def __str__(self) -> str:
         return _format_marker(self._markers)

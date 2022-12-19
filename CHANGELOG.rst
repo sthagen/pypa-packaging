@@ -4,6 +4,11 @@ Changelog
 *unreleased*
 ~~~~~~~~~~~~
 
+No unreleased changes.
+
+22.0 - 2022-12-07
+~~~~~~~~~~~~~~~~~
+
 * Explicitly declare support for Python 3.11 (:issue:`587`)
 * Remove support for Python 3.6 (:issue:`500`)
 * Remove ``LegacySpecifier`` and ``LegacyVersion`` (:issue:`407`)
