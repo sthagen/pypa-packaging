@@ -4,6 +4,11 @@ Changelog
 *unreleased*
 ~~~~~~~~~~~~
 
+No unreleased changes.
+
+23.2 - 2023-10-01
+~~~~~~~~~~~~~~~~~
+
 * Document calendar-based versioning scheme (:issue:`716`)
 * Enforce that the entire marker string is parsed (:issue:`687`)
 * Requirement parsing no longer automatically validates the URL (:issue:`120`)
@@ -11,6 +16,9 @@ Changelog
 * Introduce ``metadata.Metadata`` (along with ``metadata.ExceptionGroup`` and ``metadata.InvalidMetadata``; :issue:`570`)
 * Introduce the ``validate`` keyword parameter to ``utils.validate_name()`` (:issue:`570`)
 * Introduce ``utils.is_normalized_name()`` (:issue:`570`)
+* Make ``utils.parse_sdist_filename()`` and ``utils.parse_wheel_filename()``
+  raise ``InvalidSdistFilename`` and ``InvalidWheelFilename``, respectively,
+  when the version component of the name is invalid
 
 23.1 - 2023-04-12
 ~~~~~~~~~~~~~~~~~
