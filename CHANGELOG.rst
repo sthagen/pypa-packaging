@@ -4,7 +4,13 @@ Changelog
 *unreleased*
 ~~~~~~~~~~~~
 
+No unreleased changes.
+
+25.0 - 2025-04-19
+~~~~~~~~~~~~~~~~~
+
 * PEP 751: Add support for ``extras`` and ``dependency_groups`` markers. (:issue:`885`)
+* PEP 738: Add support for Android platform tags. (:issue:`880`)
 
 24.2 - 2024-11-08
 ~~~~~~~~~~~~~~~~~
