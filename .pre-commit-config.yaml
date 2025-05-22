@@ -14,7 +14,7 @@ repos:
       - id: mypy
         exclude: '^(docs|tasks|tests)|setup\.py'
         args: []
-        additional_dependencies: [pyparsing, nox]
+        additional_dependencies: [pyparsing, nox, orjson]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.8
@@ -33,5 +33,6 @@ repos:
   - repo: https://github.com/codespell-project/codespell
     rev: "v2.4.1"
     hooks:
-    - id: codespell
-      args: ["-Ldynamc,notin"]
+      - id: codespell
+        additional_dependencies:
+          - tomli; python_version<'3.11'
