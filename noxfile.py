@@ -43,21 +43,19 @@ def tests(session):
     coverage = ["python", "-m", "coverage"]
 
     session.install(*nox.project.dependency_groups(PYPROJECT, "test"))
-    session.install(".")
+    session.install("-e.")
     env = {} if session.python != "3.14" else {"COVERAGE_CORE": "sysmon"}
 
     if "pypy" not in session.python:
         session.run(
             *coverage,
             "run",
-            "--source",
-            "packaging",
             "-m",
             "pytest",
             *session.posargs,
             env=env,
         )
-        session.run(*coverage, "report", "-m", "--fail-under", "100")
+        session.run(*coverage, "report")
     else:
         # Don't do coverage tracking for PyPy, since it's SLOW.
         session.run(
@@ -307,7 +305,7 @@ def _replace_file(original_path):
 
 def _changelog_update_unreleased_title(version, *, file):
     """Update an "*unreleased*" heading to "{version} - {date}" """
-    yyyy_mm_dd = datetime.datetime.today().strftime("%Y-%m-%d")
+    yyyy_mm_dd = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
     title = f"{version} - {yyyy_mm_dd}"
 
     with _replace_file(file) as (original, replacement):
