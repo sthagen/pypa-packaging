@@ -64,6 +64,8 @@ class InvalidSpecifier(ValueError):
 
 
 class BaseSpecifier(metaclass=abc.ABCMeta):
+    __slots__ = ()
+
     @abc.abstractmethod
     def __str__(self) -> str:
         """
@@ -127,6 +129,8 @@ class Specifier(BaseSpecifier):
         prefer to work with :class:`SpecifierSet` instead, which can parse
         comma-separated version specifiers (which is what package metadata contains).
     """
+
+    __slots__ = ("_prereleases", "_spec", "_spec_version")
 
     _operator_regex_str = r"""
         (?P<operator>(~=|==|!=|<=|>=|<|>|===))
@@ -226,7 +230,7 @@ class Specifier(BaseSpecifier):
         """
 
     _regex = re.compile(
-        r"^\s*" + _operator_regex_str + _version_regex_str + r"\s*$",
+        r"\s*" + _operator_regex_str + _version_regex_str + r"\s*",
         re.VERBOSE | re.IGNORECASE,
     )
 
@@ -254,7 +258,7 @@ class Specifier(BaseSpecifier):
         :raises InvalidSpecifier:
             If the given specifier is invalid (i.e. bad syntax).
         """
-        match = self._regex.search(spec)
+        match = self._regex.fullmatch(spec)
         if not match:
             raise InvalidSpecifier(f"Invalid specifier: {spec!r}")
 
@@ -649,7 +653,7 @@ class Specifier(BaseSpecifier):
             yield from prereleases_versions
 
 
-_prefix_regex = re.compile(r"^([0-9]+)((?:a|b|c|rc)[0-9]+)$")
+_prefix_regex = re.compile(r"([0-9]+)((?:a|b|c|rc)[0-9]+)")
 
 
 def _version_split(version: str) -> list[str]:
@@ -666,7 +670,7 @@ def _version_split(version: str) -> list[str]:
     result.append(epoch or "0")
 
     for item in rest.split("."):
-        match = _prefix_regex.search(item)
+        match = _prefix_regex.fullmatch(item)
         if match:
             result.extend(match.groups())
         else:
@@ -718,6 +722,8 @@ class SpecifierSet(BaseSpecifier):
     It can be passed a single specifier (``>=3.0``), a comma-separated list of
     specifiers (``>=3.0,!=3.1``), or no specifier at all.
     """
+
+    __slots__ = ("_prereleases", "_specs")
 
     def __init__(
         self,
