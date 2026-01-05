@@ -122,20 +122,28 @@ class Environment(TypedDict):
     """
 
 
+def _normalize_extras(
+    result: MarkerList | MarkerAtom | str,
+) -> MarkerList | MarkerAtom | str:
+    if not isinstance(result, tuple):
+        return result
+
+    lhs, op, rhs = result
+    if isinstance(lhs, Variable) and lhs.value == "extra":
+        normalized_extra = canonicalize_name(rhs.value)
+        rhs = Value(normalized_extra)
+    elif isinstance(rhs, Variable) and rhs.value == "extra":
+        normalized_extra = canonicalize_name(lhs.value)
+        lhs = Value(normalized_extra)
+    return lhs, op, rhs
+
+
 def _normalize_extra_values(results: MarkerList) -> MarkerList:
     """
     Normalize extra values.
     """
-    if isinstance(results[0], tuple):
-        lhs, op, rhs = results[0]
-        if isinstance(lhs, Variable) and lhs.value == "extra":
-            normalized_extra = canonicalize_name(rhs.value)
-            rhs = Value(normalized_extra)
-        elif isinstance(rhs, Variable) and rhs.value == "extra":
-            normalized_extra = canonicalize_name(lhs.value)
-            lhs = Value(normalized_extra)
-        results[0] = lhs, op, rhs
-    return results
+
+    return [_normalize_extras(r) for r in results]
 
 
 def _format_marker(
@@ -277,6 +285,11 @@ class Marker:
         # Note: We create a Marker object without calling this constructor in
         #       packaging.requirements.Requirement. If any additional logic is
         #       added here, make sure to mirror/adapt Requirement.
+
+        # If this fails and throws an error, the repr still expects _markers to
+        # be defined.
+        self._markers: MarkerList = []
+
         try:
             self._markers = _normalize_extra_values(_parse_marker(marker))
             # The attribute `_markers` can be described in terms of a recursive type:
@@ -302,10 +315,10 @@ class Marker:
         return _format_marker(self._markers)
 
     def __repr__(self) -> str:
-        return f"<Marker('{self}')>"
+        return f"<{self.__class__.__name__}('{self}')>"
 
     def __hash__(self) -> int:
-        return hash((self.__class__.__name__, str(self)))
+        return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Marker):
