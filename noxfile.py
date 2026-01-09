@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["nox>=2025.02.09"]
+# dependencies = ["nox>=2025.02.09", "packaging"]
 # ///
 
 from __future__ import annotations
@@ -16,11 +16,12 @@ import sys
 import tempfile
 import textwrap
 import time
-import webbrowser
 from pathlib import Path
 from typing import IO, Generator
 
 import nox
+
+import packaging.version  # will always be present with nox
 
 nox.needs_version = ">=2025.02.09"
 nox.options.reuse_existing_virtualenvs = True
@@ -41,6 +42,9 @@ PYTHON_VERSIONS = nox.project.python_versions(PYPROJECT)
     default=False,
 )
 def tests(session: nox.Session) -> None:
+    """
+    Run the tests, with coverage.
+    """
     coverage = ["python", "-m", "coverage"]
 
     session.install(*nox.project.dependency_groups(PYPROJECT, "test"))
@@ -70,20 +74,26 @@ def tests(session: nox.Session) -> None:
         )
 
 
-@nox.session(python="3.9")
+@nox.session(python="3.10")
 def lint(session: nox.Session) -> None:
-    # Run the linters (via pre-commit)
-    session.install("pre-commit")
-    session.run("pre-commit", "run", "--all-files", *session.posargs)
+    """
+    Run the linters.
+    """
+    session.install("prek", "build", "twine")
+
+    # Run the linters (via prek, a Rust pre-commit runner)
+    session.run("prek", "run", "--all-files", *session.posargs)
 
     # Check the distribution
-    session.install("build", "twine")
     session.run("pyproject-build")
     session.run("twine", "check", *glob.glob("dist/*"))
 
 
 @nox.session(python="3.9", default=False)
 def docs(session: nox.Session) -> None:
+    """
+    Build the docs.
+    """
     shutil.rmtree("docs/_build", ignore_errors=True)
     session.install("-r", "docs/requirements.txt")
     session.install("-e", ".")
@@ -110,6 +120,9 @@ def docs(session: nox.Session) -> None:
 
 @nox.session(default=False)
 def release(session: nox.Session) -> None:
+    """
+    Give a version number to use as tag.
+    """
     package_name = "packaging"
     version_file = Path(f"src/{package_name}/__init__.py")
     changelog_file = Path("CHANGELOG.rst")
@@ -129,6 +142,9 @@ def release(session: nox.Session) -> None:
     session.run("git", "add", str(changelog_file), external=True)
     _bump(session, version=release_version, file=version_file, kind="release")
 
+    # Check the built distribution.
+    _build_and_check(session, release_version, remove=True)
+
     # Tag the release commit.
     # fmt: off
     session.run(
@@ -143,14 +159,97 @@ def release(session: nox.Session) -> None:
     _changelog_add_unreleased_title(file=changelog_file)
     session.run("git", "add", str(changelog_file), external=True)
 
-    major, minor = map(int, release_version.split("."))
-    next_version = f"{major}.{minor + 1}.dev0"
+    rel_ver = packaging.version.Version(release_version)
+    next_version = f"{rel_ver.major}.{rel_ver.minor + 1}.dev0"
     _bump(session, version=next_version, file=version_file, kind="development")
 
-    # Checkout the git tag.
-    session.run("git", "checkout", "-q", release_version, external=True)
+    # Push the commits and tag.
+    # NOTE: The following fails if pushing to the branch is not allowed. This can
+    #       happen on GitHub, if the main branch is protected, there are required
+    #       CI checks and "Include administrators" is enabled on the protection.
+    session.log("Run the following to push changes and tag (assuming 'upstream')")
+    print()
+    print(f"  git push upstream main {release_version}")
+    print()
+
+
+@nox.session
+def release_build(session: nox.Session) -> None:
+    """
+    Build version from command-line arguments otherwise current Git tag.
+    """
+    release_version: str | None
+    try:
+        release_version = _get_version_from_arguments(session.posargs)
+    except ValueError as e:
+        if session.posargs:
+            session.error(f"Invalid arguments: {e}")
+
+        release_version = session.run(
+            "git", "describe", "--exact-match", silent=True, external=True
+        )
+        release_version = "" if release_version is None else release_version.strip()
+        session.debug(f"version: {release_version}")
+        checkout = False
+    else:
+        checkout = True
+
+    # Check state of working directory.
+    _check_working_directory_state(session)
+
+    # Ensure there are no uncommitted changes.
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        check=False,
+        capture_output=True,
+        encoding="utf-8",
+    )
+    if result.stdout:
+        print(result.stdout, end="", file=sys.stderr)
+        session.error("The working tree has uncommitted changes")
+
+    # Check out the Git tag, if provided.
+    if checkout:
+        session.run("git", "switch", "-q", release_version, external=True)
+
+    # Build the distribution.
+    _build_and_check(session, release_version)
+
+    # Get back out into main, if we checked out before.
+    if checkout:
+        session.run("git", "switch", "-q", "main", external=True)
+
+
+@nox.session(default=False)
+def update_licenses(session: nox.Session) -> None:
+    """
+    Update licenses.
+    """
+    session.install("httpx")
+    session.run("python", "tasks/licenses.py")
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+
+
+def _build_and_check(
+    session: nox.Session,
+    release_version: str,
+    remove: bool = False,
+) -> None:
+    package_name = "packaging"
 
     session.install("build", "twine")
+
+    # Determine if we're in install-only mode. This works as `python --version`
+    # should always succeed when running `nox`, but in install-only mode
+    # `session.run(..., silent=True)` always immediately returns `None` instead
+    # of invoking the command and returning the command's output. See the
+    # documentation at:
+    # https://nox.thea.codes/en/stable/usage.html#skipping-everything-but-install-commands
+    install_only = session.run("python", "--version", silent=True) is None
 
     # Build the distribution.
     session.run("python", "-m", "build")
@@ -161,41 +260,21 @@ def release(session: nox.Session) -> None:
         f"dist/{package_name}-{release_version}-py3-none-any.whl",
         f"dist/{package_name}-{release_version}.tar.gz",
     ]
-    if files != expected:
+    if files != expected and not install_only:
         diff_generator = difflib.context_diff(
             expected, files, fromfile="expected", tofile="got", lineterm=""
         )
         diff = "\n".join(diff_generator)
         session.error(f"Got the wrong files:\n{diff}")
 
-    # Get back out into main.
-    session.run("git", "checkout", "-q", "main", external=True)
+    # Check distribution files.
+    session.run("twine", "check", "--strict", *files)
 
-    # Check and upload distribution files.
-    session.run("twine", "check", *files)
-
-    # Push the commits and tag.
-    # NOTE: The following fails if pushing to the branch is not allowed. This can
-    #       happen on GitHub, if the main branch is protected, there are required
-    #       CI checks and "Include administrators" is enabled on the protection.
-    session.run("git", "push", "upstream", "main", release_version, external=True)
-
-    # Upload the distribution.
-    session.run("twine", "upload", *files)
-
-    # Open up the GitHub release page.
-    webbrowser.open("https://github.com/pypa/packaging/releases")
+    # Remove distribution files, if requested.
+    if remove and not install_only:
+        shutil.rmtree("dist", ignore_errors=True)
 
 
-@nox.session(default=False)
-def update_licenses(session: nox.Session) -> None:
-    session.install("httpx")
-    session.run("python", "tasks/licenses.py")
-
-
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
 def _get_version_from_arguments(arguments: list[str]) -> str:
     """Checks the arguments passed to `nox -s release`.
 
@@ -212,9 +291,9 @@ def _get_version_from_arguments(arguments: list[str]) -> str:
         # Not of the form: YY.N
         raise ValueError("not of the form: YY.N")
 
-    if not all(part.isdigit() for part in parts):
-        # Not all segments are integers.
-        raise ValueError("non-integer segments")
+    norm_version = str(packaging.version.Version(version))
+    if norm_version != version:
+        raise ValueError(f"Must be normalized version {norm_version!r}")
 
     # All is good.
     return version
