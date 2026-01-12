@@ -17,6 +17,8 @@ permissions: {}
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get-tag.outputs.tag }}
 
     steps:
       - name: Log inputs
@@ -31,15 +33,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Log Git tag
-        run: git describe --always --tags
-
       - name: Check ref is the commit SHA
         # require SHA as tags and branches are mutable
         run: test "${INPUTS_REF}"
           = "$(git log --max-count=1 --format=format:%h)"
           || test "${INPUTS_REF}"
           = "$(git log --max-count=1 --format=format:%H)"
+        env:
+          INPUTS_REF: ${{ inputs.ref }}
+
+      - name: Get git tag
+        id: get-tag
+        run: echo "tag=$(git tag --points-at "$INPUTS_REF")" >> "$GITHUB_OUTPUT"
         env:
           INPUTS_REF: ${{ inputs.ref }}
 
@@ -62,13 +67,14 @@ jobs:
 
   publish:
     needs:
-    - build
+      - build
     environment:
       name: pypi
-      url: https://pypi.org/project/packaging/${{ github.ref_name }}
+      url: https://pypi.org/project/packaging/${{ needs.build.outputs.tag }}
     permissions:
       id-token: write
-    if: '!github.event.repository.fork'
+    # Only publish if there's a matching tag, and if this is not a fork
+    if: needs.build.outputs.tag != '' && !github.event.repository.fork
 
     runs-on: ubuntu-latest
 
