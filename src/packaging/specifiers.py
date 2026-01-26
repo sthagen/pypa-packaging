@@ -349,10 +349,7 @@ class Specifier(BaseSpecifier):
 
         # For all other operators, use the check if spec Version
         # object implies pre-releases.
-        if version.is_prerelease:
-            return True
-
-        return False
+        return version.is_prerelease
 
     @prereleases.setter
     def prereleases(self, value: bool | None) -> None:
@@ -922,11 +919,10 @@ class SpecifierSet(BaseSpecifier):
         specifier = SpecifierSet()
         specifier._specs = frozenset(self._specs | other._specs)
 
-        if self._prereleases is None and other._prereleases is not None:
+        # Combine prerelease settings: use common or non-None value
+        if self._prereleases is None or self._prereleases == other._prereleases:
             specifier._prereleases = other._prereleases
-        elif (
-            self._prereleases is not None and other._prereleases is None
-        ) or self._prereleases == other._prereleases:
+        elif other._prereleases is None:
             specifier._prereleases = self._prereleases
         else:
             raise ValueError(
