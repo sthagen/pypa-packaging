@@ -8,13 +8,17 @@ import operator
 import os
 import platform
 import sys
-from typing import AbstractSet, Callable, Literal, Mapping, TypedDict, Union, cast
+from collections.abc import Set as AbstractSet
+from typing import TYPE_CHECKING, Callable, Literal, TypedDict, Union, cast
 
 from ._parser import MarkerAtom, MarkerList, Op, Value, Variable
 from ._parser import parse_marker as _parse_marker
 from ._tokenizer import ParserSyntaxError
 from .specifiers import InvalidSpecifier, Specifier
 from .utils import canonicalize_name
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = [
     "Environment",
@@ -459,14 +463,15 @@ class Marker:
             "dict[str, str | AbstractSet[str]]", default_environment()
         )
         if context == "lock_file":
-            current_environment.update(
-                extras=frozenset(), dependency_groups=frozenset()
-            )
+            current_environment |= {
+                "extras": frozenset(),
+                "dependency_groups": frozenset(),
+            }
         elif context == "metadata":
             current_environment["extra"] = ""
 
         if environment is not None:
-            current_environment.update(environment)
+            current_environment |= environment
             if "extra" in current_environment:
                 # The API used to allow setting extra to None. We need to handle
                 # this case for backwards compatibility. Also skip running
@@ -479,6 +484,16 @@ class Marker:
         )
 
 
+def _pep440_python_full_version(python_full_version: str) -> str:
+    """
+    Work around platform.python_version() returning something that is not PEP 440
+    compliant for non-tagged Python builds.
+    """
+    if python_full_version.endswith("+"):
+        return f"{python_full_version}local"
+    return python_full_version
+
+
 def _repair_python_full_version(
     env: dict[str, str | AbstractSet[str]],
 ) -> dict[str, str | AbstractSet[str]]:
@@ -487,6 +502,5 @@ def _repair_python_full_version(
     compliant for non-tagged Python builds.
     """
     python_full_version = cast("str", env["python_full_version"])
-    if python_full_version.endswith("+"):
-        env["python_full_version"] = f"{python_full_version}local"
+    env["python_full_version"] = _pep440_python_full_version(python_full_version)
     return env
