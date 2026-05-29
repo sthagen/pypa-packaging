@@ -545,12 +545,12 @@ def _mac_binary_formats(version: AppleVersion, cpu_arch: str) -> list[str]:
     if cpu_arch == "x86_64":
         if version < (10, 4):
             return []
-        formats.extend(["intel", "fat64", "fat32"])
+        formats.extend(["intel", "fat64", "fat3"])
 
     elif cpu_arch == "i386":
         if version < (10, 4):
             return []
-        formats.extend(["intel", "fat32", "fat"])
+        formats.extend(["intel", "fat3", "fat"])
 
     elif cpu_arch == "ppc64":
         # TODO: Need to care about 32-bit PPC for ppc64 through 10.2?
@@ -561,7 +561,7 @@ def _mac_binary_formats(version: AppleVersion, cpu_arch: str) -> list[str]:
     elif cpu_arch == "ppc":
         if version > (10, 6):
             return []
-        formats.extend(["fat32", "fat"])
+        formats.extend(["fat3", "fat"])
 
     if cpu_arch in {"arm64", "x86_64"}:
         formats.append("universal2")
@@ -864,7 +864,7 @@ def sys_tags(*, warn: bool = False) -> Iterator[Tag]:
 
     .. versionchanged:: 21.3
         Added the `pp3-none-any` tag (:issue:`311`).
-    .. versionchanged:: 27.0
+    .. versionchanged:: 26.1
         Added the `abi3t` tag (:issue:`1099`).
     """
 
