@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 __all__ = [
     "INTERPRETER_SHORT_NAMES",
     "AppleVersion",
+    "InvalidTag",
     "PythonVersion",
     "Tag",
     "UnsortedTagsError",
@@ -81,6 +82,14 @@ class UnsortedTagsError(ValueError):
     Raised when a tag component is not in sorted order per PEP 425.
 
     .. versionadded:: 26.1
+    """
+
+
+class InvalidTag(ValueError):
+    """
+    Raised when a tag has an empty interpreter, ABI, or platform component.
+
+    .. versionadded:: 26.3
     """
 
 
@@ -216,24 +225,33 @@ def parse_tag(tag: str, *, validate_order: bool = False) -> frozenset[Tag]:
         are in sorted order.
     :raises UnsortedTagsError: If **validate_order** is true and any compressed tag
         set component is not in sorted order.
+    :raises InvalidTag: If the interpreter, ABI, or platform field (or any member
+        of a compressed tag set) is empty.
 
     .. versionadded:: 26.1
        The *validate_order* parameter.
+
+    .. versionadded:: 26.3
+       Raises :class:`InvalidTag` on empty tag components.
     """
-    tags = set()
-    interpreters, abis, platforms = tag.split("-")
-    if validate_order:
-        for component in (interpreters, abis, platforms):
-            parts = component.split(".")
-            if parts != sorted(parts):
-                raise UnsortedTagsError(
-                    f"Tag component {component!r} is not in sorted order per PEP 425"
-                )
-    for interpreter in interpreters.split("."):
-        for abi in abis.split("."):
-            for platform_ in platforms.split("."):
-                tags.add(Tag(interpreter, abi, platform_))
-    return frozenset(tags)
+    component_parts = [component.split(".") for component in tag.split("-")]
+    for parts in component_parts:
+        if "" in parts:
+            component = ".".join(parts)
+            raise InvalidTag(f"Tag {tag!r} has an empty component: {component!r}")
+        if validate_order and parts != sorted(parts):
+            component = ".".join(parts)
+            raise UnsortedTagsError(
+                f"Tag component {component!r} is not in sorted order per PEP 425"
+            )
+
+    interpreters, abis, platforms = component_parts
+    return frozenset(
+        Tag(interpreter, abi, platform_)
+        for interpreter in interpreters
+        for abi in abis
+        for platform_ in platforms
+    )
 
 
 def _get_config_var(name: str, warn: bool = False) -> int | str | None:
