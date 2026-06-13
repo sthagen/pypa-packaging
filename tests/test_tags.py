@@ -441,6 +441,19 @@ class TestMacOSPlatforms:
             assert "macosx_12_0_arm64" in platforms
             assert "macosx_12_0_universal2" in platforms
 
+    def test_no_mac_ver_when_both_args_given(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # When both version and arch are explicitly provided, platform.mac_ver()
+        # must not be called — it reads from the system and is irrelevant for
+        # cross-targeting use cases.
+        mac_ver_stub = pretend.call_recorder(
+            pretend.raiser(AssertionError("platform.mac_ver() must not be called"))
+        )
+        monkeypatch.setattr(platform, "mac_ver", mac_ver_stub)
+        list(tags.mac_platforms(version=(11, 0), arch="x86_64"))
+        assert mac_ver_stub.calls == []
+
 
 class TestIOSPlatforms:
     @pytest.mark.usefixtures("mock_ios")
@@ -1140,6 +1153,13 @@ class TestCPythonTags:
             tags.Tag("cp33", "abi3t", "platform"),
             tags.Tag("cp32", "abi3t", "platform"),
         ]
+
+        result = list(tags.cpython_tags((3, 15), ["cp315t", "abi3t"], ["platform"]))
+        assert result == [
+            tags.Tag("cp315", "cp315t", "platform"),
+            tags.Tag("cp315", "abi3t", "platform"),
+            tags.Tag("cp315", "none", "platform"),
+        ] + [tags.Tag(f"cp3{minor}", "abi3t", "platform") for minor in range(14, 1, -1)]
 
         result = list(tags.cpython_tags((3, 16), ["cp316t"], ["platform"]))
         assert result == [
