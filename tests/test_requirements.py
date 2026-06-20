@@ -30,6 +30,15 @@ EQUAL_DEPENDENCIES = [
 
 EQUIVALENT_DEPENDENCIES = [
     ("scikit-learn==1.0.1", "scikit_learn==1.0.1"),
+    # Trailing-zero-equivalent specifiers compare equal, so they must hash
+    # equal too (regression guard for the __hash__/__eq__ invariant).
+    ("foo==1.0.0", "foo==1.0.0.0"),
+    ("foo>=1.0", "foo>=1.0.0"),
+    # Canonical-specifier hashing must hold alongside extras + marker.
+    (
+        'foo[a]==1.0.0; python_version>="3.8"',
+        'foo[a]==1.0.0.0; python_version>="3.8"',
+    ),
 ]
 
 DIFFERENT_DEPENDENCIES = [
@@ -462,6 +471,34 @@ class TestRequirementParsing:
             "    name; '3.7' <= invalid_name\n"
             "                   ^"
         )
+
+    @pytest.mark.parametrize(
+        ("to_parse", "expected"),
+        [
+            (
+                'name; os_name == "C:\\"',
+                "packaging.requirements.InvalidRequirement: Invalid quoted string\n"
+                '    name; os_name == "C:\\"\n'
+                "                     ~~~~~^",
+            ),
+            (
+                r'name; os_name == "\x"',
+                "packaging.requirements.InvalidRequirement: Invalid quoted string\n"
+                r'    name; os_name == "\x"'
+                "\n"
+                "                     ~~~~^",
+            ),
+        ],
+    )
+    def test_error_invalid_marker_malformed_quoted_string(
+        self, to_parse: str, expected: str
+    ) -> None:
+        # WHEN
+        with pytest.raises(InvalidRequirement) as ctx:
+            Requirement(to_parse)
+
+        # THEN
+        assert ctx.exconly() == expected
 
     def test_error_invalid_marker_notin_without_whitespace(self) -> None:
         # GIVEN

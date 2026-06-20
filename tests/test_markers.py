@@ -201,6 +201,31 @@ class TestMarker:
     @pytest.mark.parametrize(
         ("marker_string", "expected"),
         [
+            (
+                'os_name == "C:\\"',
+                "packaging.markers.InvalidMarker: Invalid quoted string\n"
+                '    os_name == "C:\\"\n'
+                "               ~~~~~^",
+            ),
+            (
+                r'os_name == "\x"',
+                "packaging.markers.InvalidMarker: Invalid quoted string\n"
+                r'    os_name == "\x"'
+                "\n"
+                "               ~~~~^",
+            ),
+        ],
+    )
+    def test_parses_invalid_malformed_quoted_string(
+        self, marker_string: str, expected: str
+    ) -> None:
+        with pytest.raises(InvalidMarker) as ctx:
+            Marker(marker_string)
+        assert ctx.exconly() == expected
+
+    @pytest.mark.parametrize(
+        ("marker_string", "expected"),
+        [
             # Test the different quoting rules
             ("python_version == '2.7'", 'python_version == "2.7"'),
             ('python_version == "2.7"', 'python_version == "2.7"'),
@@ -421,6 +446,23 @@ class TestMarker:
 
         assert str(Marker(lhs)) == f'"{normalized_name}" == extra'
         assert str(Marker(rhs)) == f'extra == "{normalized_name}"'
+
+    def test_extra_compared_to_variable_not_normalized(self) -> None:
+        # A variable-vs-variable atom must not be rewritten into a string
+        # literal, even when one side is ``extra``.
+        assert str(Marker("extra == os_name")) == "extra == os_name"
+        assert str(Marker("os_name == extra")) == "os_name == extra"
+
+    def test_nested_extra_str_normalization(self) -> None:
+        marker = Marker(
+            '(extra == "Foo_Bar" or extra == "Baz") and python_version >= "3"'
+        )
+
+        assert (
+            str(marker)
+            == '(extra == "foo-bar" or extra == "baz") and python_version >= "3"'
+        )
+        assert marker.evaluate({"extra": "foo-bar", "python_version": "3.12"})
 
     def test_python_full_version_untagged_user_provided(self) -> None:
         """A user-provided python_full_version ending with a + is also repaired."""
