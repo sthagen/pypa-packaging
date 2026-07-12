@@ -3,6 +3,7 @@ from __future__ import annotations
 import email
 import inspect
 import pathlib
+import pickle
 import textwrap
 import typing
 
@@ -177,6 +178,27 @@ class TestRawMetadata:
         assert "description" in unparsed
         assert unparsed["description"] == expected
 
+    @pytest.mark.parametrize("encode", [False, True])
+    def test_description_multipart_payload(self, encode: bool) -> None:
+        # A multipart body makes get_payload() return a non-str; it must route
+        # to unparsed rather than trip the old assert.
+        metadata_text = (
+            "Metadata-Version: 2.1\n"
+            "Name: example\n"
+            'Content-Type: multipart/mixed; boundary="BOUND"\n'
+            "\n"
+            "--BOUND\n"
+            "Content-Type: text/plain\n"
+            "\n"
+            "the description\n"
+            "--BOUND--\n"
+        )
+        given: str | bytes = metadata_text.encode("utf8") if encode else metadata_text
+        raw, unparsed = metadata.parse_email(given)
+        assert raw["name"] == "example"
+        assert "description" not in raw
+        assert "description" in unparsed
+
     def test_lowercase_keys(self) -> None:
         header = "AUTHOR: Tarek Ziadé\nWhatever: Else"
         raw, unparsed = metadata.parse_email(header)
@@ -260,6 +282,14 @@ class TestRawMetadata:
         assert raw["import_namespaces"] == ["spam", "_bacon ; private"]
 
 
+class TestInvalidMetadata:
+    def test_pickle_roundtrip(self) -> None:
+        exc = metadata.InvalidMetadata("version", "'1.0.a' is invalid")
+        copy = pickle.loads(pickle.dumps(exc))
+        assert copy.field == exc.field
+        assert str(copy) == str(exc)
+
+
 class TestExceptionGroup:
     def test_attributes(self) -> None:
         individual_exception = Exception("not important")
@@ -332,6 +362,34 @@ class TestMetadata:
             metadata.Metadata.from_email(
                 "Project-URL: A, B\nProject-URL: A, C", validate=True
             )
+
+    @pytest.mark.parametrize(
+        "description_content_type",
+        [
+            "text/plain\n folded",
+            'text/plain; charset="unterminated',
+            "text/plain; {b}",
+            "text/plain; a}b",
+            "text/plain; x*",
+        ],
+    )
+    def test_from_email_wraps_description_content_type_parse_errors(
+        self,
+        description_content_type: str,
+    ) -> None:
+        with pytest.raises(ExceptionGroup) as exc_info:
+            metadata.Metadata.from_email(
+                "Metadata-Version: 2.6\n"
+                "Name: packaging\n"
+                "Version: 1.0\n"
+                f"Description-Content-Type: {description_content_type}\n"
+            )
+
+        (exc,) = exc_info.value.exceptions
+        assert isinstance(exc, metadata.InvalidMetadata)
+        assert exc.field == "description-content-type"
+        assert repr(description_content_type) in str(exc)
+        assert "is not a valid content type" in str(exc)
 
     def test_required_fields(self) -> None:
         meta = metadata.Metadata.from_raw(_RAW_EXAMPLE)
@@ -477,6 +535,14 @@ class TestMetadata:
         meta = metadata.Metadata.from_raw({"version": "a.b.c"}, validate=False)
         self._invalid_with_cause(meta, "version", version.InvalidVersion)
 
+    def test_invalid_version_with_placeholder_text(self) -> None:
+        # A user value containing the literal text "{field}" must survive
+        # unchanged in the error message.
+        meta = metadata.Metadata.from_raw({"version": "{field}"}, validate=False)
+        with pytest.raises(metadata.InvalidMetadata) as exc_info:
+            meta.version  # noqa: B018
+        assert str(exc_info.value) == "'{field}' is invalid for 'version'"
+
     def test_valid_summary(self) -> None:
         summary = "Hello"
         meta = metadata.Metadata.from_raw({"summary": summary}, validate=False)
@@ -531,11 +597,22 @@ class TestMetadata:
             "text/plain; charset=utf-8",
             "text/markdown; variant=gfm",
             "text/markdown; variant=commonmark",
+            "text/plain; {b}",
+            "text/plain; a}b",
+            "text/plain; x*",
         ],
     )
     def test_invalid_description_content_type(self, content_type: str) -> None:
         meta = metadata.Metadata.from_raw(
             {"description_content_type": content_type}, validate=False
+        )
+
+        with pytest.raises(metadata.InvalidMetadata):
+            meta.description_content_type  # noqa: B018
+
+    def test_invalid_description_content_type_without_defects(self) -> None:
+        meta = metadata.Metadata.from_raw(
+            {"description_content_type": "application/octet-stream"}, validate=False
         )
 
         with pytest.raises(metadata.InvalidMetadata):

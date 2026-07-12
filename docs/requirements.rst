@@ -51,6 +51,10 @@ Usage
     >>> # You can do simple comparisons between requirement objects:
     >>> Requirement("packaging") == Requirement("packaging")
     True
+    >>> Requirement("my_pkg[foo_bar] == 1.0") == Requirement("my-pkg[foo-bar] == 1.0.0")
+    True
+    >>> str(Requirement("my_pkg[foo_bar] == 1.0"))
+    'my_pkg[foo_bar]==1.0'
     >>> # You can also perform simple comparisons between sets of requirements:
     >>> requirements1 = {Requirement("packaging"), Requirement("pip")}
     >>> requirements2 = {Requirement("pip"), Requirement("packaging")}
@@ -73,6 +77,12 @@ Reference
     This class abstracts handling the details of a requirement for a project.
     Each requirement will be parsed according to the specification.
 
+    .. versionadded:: 16.1
+
+    .. versionchanged:: 22.0
+        Added equality (``__eq__``) and hashing (``__hash__``) so requirements
+        can be compared and stored in sets / dicts.
+
     Instances are safe to serialize with :mod:`pickle`. They use a stable
     format so the same pickle can be loaded in future packaging releases.
 
@@ -88,6 +98,10 @@ Reference
         The dedicated pickle support introduced in 26.2 did not preserve the
         specifier's explicit :attr:`~packaging.specifiers.SpecifierSet.prereleases`
         override; it is now included again.
+
+        Equality and hashing normalize requirement names, extras, and
+        equivalent specifiers. The string representation still preserves the
+        parsed name and extras spelling.
 
     :param str requirement_string: The string representation of a requirement.
     :raises InvalidRequirement: If the given ``requirement_string`` is not parseable,
@@ -117,3 +131,5 @@ Reference
 
     Raised when attempting to create a :class:`Requirement` with a string that
     does not conform to the specification.
+
+    .. versionadded:: 16.1

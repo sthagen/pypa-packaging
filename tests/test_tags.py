@@ -167,6 +167,29 @@ class TestParseTag:
         )
         assert given == expected
 
+    def test_limit_allows_exact_number_of_tags(self) -> None:
+        expected = {tags.Tag("py2", "none", "any"), tags.Tag("py3", "none", "any")}
+        given = tags.parse_tag("py2.py3-none-any", limit=2)
+        assert given == expected
+
+    def test_limit_raises_when_exceeded(self) -> None:
+        with pytest.raises(tags.TooManyTagsError, match="would generate 2 tags"):
+            tags.parse_tag("py2.py3-none-any", limit=1)
+
+    def test_limit_counts_cartesian_product_entries(self) -> None:
+        # "py3.py3" generates two entries, even though both collapse to the
+        # same Tag in the returned frozenset.
+        with pytest.raises(tags.TooManyTagsError, match="would generate 2 tags"):
+            tags.parse_tag("py3.py3-none-any", limit=1)
+
+    def test_limit_rejects_negative_value(self) -> None:
+        with pytest.raises(ValueError, match="limit must be non-negative"):
+            tags.parse_tag("py3-none-any", limit=-1)
+
+    def test_limit_can_be_combined_with_validate_order(self) -> None:
+        with pytest.raises(ValueError, match="not in sorted order"):
+            tags.parse_tag("py3.py2-none-any", validate_order=True, limit=2)
+
     def test_unsorted_interpreter_parses_by_default(self) -> None:
         # Unsorted tags should parse fine without validate_order
         result = tags.parse_tag("py3.py2-none-any")
@@ -209,6 +232,17 @@ class TestParseTag:
     )
     def test_empty_component_raises(self, tag: str) -> None:
         with pytest.raises(tags.InvalidTag, match="empty component"):
+            tags.parse_tag(tag)
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "py3-none",
+            "py3-none-any-extra",
+        ],
+    )
+    def test_invalid_component_count_raises(self, tag: str) -> None:
+        with pytest.raises(tags.InvalidTag, match="exactly three components"):
             tags.parse_tag(tag)
 
 
@@ -1350,6 +1384,20 @@ class TestGenericTags:
     @pytest.mark.parametrize("ext_suffix", ["invalid", "", None])
     def test__generic_abi_error(
         self, ext_suffix: str | None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = {"EXT_SUFFIX": ext_suffix}
+        monkeypatch.setattr(sysconfig, "get_config_var", config.__getitem__)
+        with pytest.raises(SystemError) as e:
+            tags._generic_abi()
+        assert "EXT_SUFFIX" in str(e.value)
+
+    # ".cpython.so" has no version component at all (would raise IndexError);
+    # ".cpython-.so" has a dash but an empty version (would build an invalid
+    # "cp" ABI). Both are malformed cpython soabis that should surface the same
+    # actionable SystemError as the other malformed EXT_SUFFIX cases.
+    @pytest.mark.parametrize("ext_suffix", [".cpython.so", ".cpython-.so"])
+    def test__generic_abi_cpython_missing_version(
+        self, ext_suffix: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         config = {"EXT_SUFFIX": ext_suffix}
         monkeypatch.setattr(sysconfig, "get_config_var", config.__getitem__)

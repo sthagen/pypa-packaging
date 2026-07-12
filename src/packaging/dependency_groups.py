@@ -4,7 +4,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from .errors import _ErrorCollector
-from .requirements import Requirement
+from .requirements import InvalidRequirement, Requirement
 
 __all__ = [
     "CyclicDependencyGroup",
@@ -53,6 +53,10 @@ class CyclicDependencyGroup(ValueError):
             "Cyclic dependency group include while resolving "
             f"{requested_group}: {reason}"
         )
+
+    # Support pickling; ``args`` does not match ``__init__``'s signature.
+    def __reduce__(self) -> tuple[type[CyclicDependencyGroup], tuple[str, str, str]]:
+        return (self.__class__, (self.requested_group, self.group, self.include_group))
 
 
 # in the PEP 735 spec, the tables in dependency group lists were described as
@@ -241,9 +245,10 @@ class DependencyGroupResolver:
         for item in raw_group:
             if isinstance(item, str):
                 # packaging.requirements.Requirement parsing ensures that this is a
-                # valid PEP 508 Dependency Specifier
-                # raises InvalidRequirement on failure
-                elements.append(Requirement(item))
+                # valid PEP 508 Dependency Specifier. Collect InvalidRequirement
+                # if it throws that.
+                with errors.collect(InvalidRequirement):
+                    elements.append(Requirement(item))
             elif isinstance(item, Mapping):
                 if tuple(item.keys()) != ("include-group",):
                     errors.error(

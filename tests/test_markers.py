@@ -20,6 +20,7 @@ from packaging.markers import (
     Marker,
     UndefinedComparison,
     UndefinedEnvironmentName,
+    _cached_default_environment,
     _format_full_version,
     default_environment,
 )
@@ -465,6 +466,26 @@ class TestMarker:
         )
         assert marker.evaluate({"extra": "foo-bar", "python_version": "3.12"})
 
+    @pytest.mark.parametrize("variable", ["extras", "dependency_groups"])
+    def test_membership_value_str_normalization(self, variable: str) -> None:
+        # PEP 685 (extras) / PEP 735 (dependency_groups): the set-membership literal
+        # is normalized at parse time, so __str__/__eq__/__hash__ stay consistent with
+        # evaluate() (which already canonicalizes both operands for these keys).
+        raw = Marker(f'"S_P__A_M" in {variable}')
+        normalized = Marker(f'"s-p-a-m" in {variable}')
+
+        assert str(raw) == f'"s-p-a-m" in {variable}'
+        assert raw == normalized
+        assert hash(raw) == hash(normalized)
+
+    @pytest.mark.parametrize("variable", ["extras", "dependency_groups"])
+    def test_membership_value_str_normalization_negated(self, variable: str) -> None:
+        raw = Marker(f'"Foo_Bar" not in {variable}')
+
+        assert str(raw) == f'"foo-bar" not in {variable}'
+        assert raw == Marker(f'"foo-bar" not in {variable}')
+        assert hash(raw) == hash(Marker(f'"foo-bar" not in {variable}'))
+
     def test_python_full_version_untagged_user_provided(self) -> None:
         """A user-provided python_full_version ending with a + is also repaired."""
         assert Marker("python_full_version < '3.12'").evaluate(
@@ -474,6 +495,20 @@ class TestMarker:
     def test_python_full_version_untagged(self) -> None:
         with mock.patch("platform.python_version", return_value="3.11.1+"):
             assert Marker("python_full_version < '3.12'").evaluate()
+
+    def test_evaluate_does_not_mutate_cached_environment(self) -> None:
+        # An evaluate() call that overrides values (and adds "extra") must not
+        # leak those overrides into the cached environment used by later calls.
+        marker = Marker("os_name == 'magic'")
+        assert marker.evaluate({"os_name": "magic"})
+
+        cached = _cached_default_environment()
+        assert cached["os_name"] == os.name
+        assert "extra" not in cached
+
+        # A second evaluate with no overrides must not see the first call's
+        # overrides, confirming the cache was copied rather than mutated.
+        assert not marker.evaluate()
 
     @pytest.mark.parametrize("variable", ["extras", "dependency_groups"])
     @pytest.mark.parametrize(
@@ -519,6 +554,17 @@ class TestMarker:
         assert issubclass(UndefinedEnvironmentName, KeyError)
         with pytest.raises(KeyError):
             marker.evaluate()
+
+    @pytest.mark.parametrize("variable", ["extras", "dependency_groups"])
+    @pytest.mark.parametrize("op", ["==", "!=", ">=", "<="])
+    def test_set_valued_marker_on_lhs_raises_undefined_comparison(
+        self, variable: str, op: str
+    ) -> None:
+        """Set-valued markers are only defined in the membership form, so using
+        one on the left-hand side of a comparison raises ``UndefinedComparison``."""
+        marker = Marker(f"{variable} {op} 'foo'")
+        with pytest.raises(UndefinedComparison):
+            marker.evaluate(context="lock_file")
 
     @pytest.mark.parametrize(
         ("marker_string", "environment", "expected"),
@@ -603,6 +649,21 @@ def test_chaining_associativity_and_str() -> None:
     )
     assert a == b
     assert str(a) == str(b)
+
+
+def test_str_preserves_nested_group_precedence() -> None:
+    # A nested group must keep its parentheses so str(Marker(...)) round-trips.
+    m = Marker(
+        'python_version < "3.10" and '
+        '((sys_platform == "linux" or sys_platform == "darwin"))'
+    )
+    reparsed = Marker(str(m))
+    for env in (
+        {"python_version": "3.12", "sys_platform": "darwin"},
+        {"python_version": "3.12", "sys_platform": "linux"},
+        {"python_version": "3.9", "sys_platform": "darwin"},
+    ):
+        assert reparsed.evaluate(env) == m.evaluate(env)
 
 
 def test_hash_eq_for_combined_markers() -> None:

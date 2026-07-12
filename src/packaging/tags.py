@@ -33,6 +33,7 @@ __all__ = [
     "InvalidTag",
     "PythonVersion",
     "Tag",
+    "TooManyTagsError",
     "UnsortedTagsError",
     "android_platforms",
     "compatible_tags",
@@ -94,7 +95,16 @@ class UnsortedTagsError(ValueError):
 
 class InvalidTag(ValueError):
     """
-    Raised when a tag has an empty interpreter, ABI, or platform component.
+    Raised when a tag has an empty interpreter, ABI, or platform component, or
+    does not have exactly three components.
+
+    .. versionadded:: 26.3
+    """
+
+
+class TooManyTagsError(ValueError):
+    """
+    Raised when a compressed tag set exceeds the configured limit.
 
     .. versionadded:: 26.3
     """
@@ -215,7 +225,9 @@ class Tag:
         raise TypeError(f"Cannot restore Tag from {state!r}")
 
 
-def parse_tag(tag: str, *, validate_order: bool = False) -> frozenset[Tag]:
+def parse_tag(
+    tag: str, *, validate_order: bool = False, limit: int | None = None
+) -> frozenset[Tag]:
     """
     Parses the provided tag (e.g. `py3-none-any`) into a frozenset of
     :class:`Tag` instances.
@@ -227,20 +239,35 @@ def parse_tag(tag: str, *, validate_order: bool = False) -> frozenset[Tag]:
     If **validate_order** is true, compressed tag set components are checked
     to be in sorted order as required by PEP 425.
 
+    If **limit** is not ``None``, the compressed tag set can generate at most
+    that many tags.
+
     :param str tag: The tag to parse, e.g. ``"py3-none-any"``.
     :param bool validate_order: Check whether compressed tag set components
         are in sorted order.
+    :param int | None limit: The maximum number of tags to parse.
     :raises UnsortedTagsError: If **validate_order** is true and any compressed tag
         set component is not in sorted order.
     :raises InvalidTag: If the interpreter, ABI, or platform field (or any member
-        of a compressed tag set) is empty.
+        of a compressed tag set) is empty, or the tag does not have exactly three
+        components.
+    :raises TooManyTagsError: If **limit** is not ``None`` and the compressed tag
+        set would generate more than **limit** tags.
+    :raises ValueError: If **limit** is negative.
 
     .. versionadded:: 26.1
        The *validate_order* parameter.
 
     .. versionadded:: 26.3
-       Raises :class:`InvalidTag` on empty tag components.
+       Raises :class:`InvalidTag` on empty tag components, or a tag that does
+       not have exactly three components.
+       Added the *limit* parameter. Raises :class:`TooManyTagsError` if the compressed
+       tag set would generate more than *limit* tags.
     """
+
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+
     component_parts = [component.split(".") for component in tag.split("-")]
     for parts in component_parts:
         if "" in parts:
@@ -252,7 +279,20 @@ def parse_tag(tag: str, *, validate_order: bool = False) -> frozenset[Tag]:
                 f"Tag component {component!r} is not in sorted order per PEP 425"
             )
 
-    interpreters, abis, platforms = component_parts
+    tag_count = 1
+    for parts in component_parts:
+        tag_count *= len(parts)
+
+    if limit is not None and tag_count > limit:
+        raise TooManyTagsError(
+            f"Compressed tag set would generate {tag_count} tags, exceeding "
+            f"limit {limit}"
+        )
+
+    try:
+        interpreters, abis, platforms = component_parts
+    except ValueError as exc:
+        raise InvalidTag(f"Tag {tag!r} must have exactly three components") from exc
     return frozenset(
         Tag(interpreter, abi, platform_)
         for interpreter in interpreters
@@ -450,7 +490,10 @@ def _generic_abi() -> list[str]:
     soabi = parts[1]
     if soabi.startswith("cpython"):
         # non-windows
-        abi = "cp" + soabi.split("-")[1]
+        cpython_parts = soabi.split("-")
+        if len(cpython_parts) < 2 or not cpython_parts[1]:
+            raise SystemError("invalid sysconfig.get_config_var('EXT_SUFFIX')")
+        abi = "cp" + cpython_parts[1]
     elif soabi.startswith("cp"):
         # windows
         abi = soabi.split("-")[0]
