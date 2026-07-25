@@ -179,6 +179,18 @@ def test_normalized_requirements(input_req: str, norm_req: str) -> None:
     assert str(req) == norm_req
 
 
+def test_requirement_marker_with_embedded_double_quote_round_trips() -> None:
+    req_string = 'demo; \'a" == os_name or python_version >= "0" or "b\' == os_name'
+    req = Requirement(req_string)
+
+    assert str(req) == req_string
+    assert req.marker is not None
+    assert req.marker.evaluate() is False
+    round_tripped_marker = Requirement(str(req)).marker
+    assert round_tripped_marker is not None
+    assert round_tripped_marker.evaluate() is False
+
+
 class TestRequirementParsing:
     @pytest.mark.parametrize(
         "marker",
@@ -217,6 +229,24 @@ class TestRequirementParsing:
         # THEN
         assert req.url == url
 
+    @pytest.mark.parametrize("line_break", ["\n", "\r", "\r\n"])
+    @pytest.mark.parametrize(
+        "requirement",
+        [
+            "name>=1",
+            'name; python_version >= "3"',
+        ],
+    )
+    def test_error_when_suffixed_with_line_break(
+        self, requirement: str, line_break: str
+    ) -> None:
+        with pytest.raises(InvalidRequirement):
+            Requirement(requirement + line_break)
+
+    @pytest.mark.parametrize("whitespace", [" ", "\t", " \t"])
+    def test_trailing_horizontal_whitespace(self, whitespace: str) -> None:
+        assert Requirement("name>=1" + whitespace) == Requirement("name>=1")
+
     def test_empty_extras(self) -> None:
         # GIVEN
         to_parse = "name[]"
@@ -244,6 +274,14 @@ class TestRequirementParsing:
     # ----------------------------------------------------------------------------------
     # Start all method names with with `test_error_`
     # to make it easier to run these tests with `-k error`
+
+    def test_error_when_specifier_set_rejects_parsed_specifier(self) -> None:
+        # GIVEN
+        to_parse = "demo===x,y"
+
+        # WHEN
+        with pytest.raises(InvalidRequirement, match="Invalid specifier: 'y'"):
+            Requirement(to_parse)
 
     def test_error_when_empty_string(self) -> None:
         # GIVEN
@@ -839,11 +877,17 @@ def test_pickle_requirement_setstate_rejects_invalid_state() -> None:
         r.__setstate__((1, 2, 3))
 
 
-def test_pickle_requirement_setstate_rejects_invalid_string() -> None:
+@pytest.mark.parametrize(
+    "invalid_requirement",
+    ["this is not a valid requirement", "demo===x,y"],
+)
+def test_pickle_requirement_setstate_rejects_invalid_string(
+    invalid_requirement: str,
+) -> None:
     # Cover the string branch where Requirement() raises InvalidRequirement.
     r = Requirement.__new__(Requirement)
     with pytest.raises(TypeError, match="Cannot restore Requirement"):
-        r.__setstate__("this is not a valid requirement")
+        r.__setstate__(invalid_requirement)
 
 
 # Pickle bytes generated with packaging==26.1, Python 3.13.1, pickle protocol 2.

@@ -150,6 +150,18 @@ def test_canonicalize_version_no_strip_trailing_zero(version: str) -> None:
             },
         ),
         (
+            "foo-2-py2.py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "foo",
+            Version("2"),
+            (),
+            {
+                Tag("py2", "none", "manylinux_2_17_x86_64"),
+                Tag("py2", "none", "manylinux2014_x86_64"),
+                Tag("py3", "none", "manylinux_2_17_x86_64"),
+                Tag("py3", "none", "manylinux2014_x86_64"),
+            },
+        ),
+        (
             "foo_bár-1.0-py3-none-any.whl",
             "foo-bár",
             Version("1.0"),
@@ -177,6 +189,7 @@ def test_parse_wheel_filename(
         ("foo-1.0.whl"),  # Missing tags
         ("foo-1.0-py3-none-any.wheel"),  # Incorrect file extension (`.wheel`)
         ("foo__bar-1.0-py3-none-any.whl"),  # Invalid name (`__`)
+        ("foo\n-1.0-py3-none-any.whl"),  # Invalid name (`\n`)
         ("foo#bar-1.0-py3-none-any.whl"),  # Invalid name (`#`)
         ("-1.0-py3-none-any.whl"),  # Empty project name
         ("-1.0-200-py3-none-any.whl"),  # Empty project name (with build number)

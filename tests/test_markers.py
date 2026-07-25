@@ -79,6 +79,26 @@ class TestNode:
         with pytest.raises(NotImplementedError):
             Node("cover all the code").serialize()
 
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("plain", '"plain"'),
+            ('a"b', "'a\"b'"),
+            ("a'b", '"a\'b"'),
+        ],
+    )
+    def test_value_serialize_chooses_quote_delimiter(
+        self, value: str, expected: str
+    ) -> None:
+        assert Value(value).serialize() == expected
+
+    def test_value_serialize_rejects_both_quote_delimiters(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="Cannot serialize marker value containing both quote characters",
+        ):
+            Value("a\"b'c").serialize()
+
 
 class TestOperatorEvaluation:
     def test_prefers_pep440(self) -> None:
@@ -105,6 +125,16 @@ class TestOperatorEvaluation:
     def test_fails_when_undefined(self) -> None:
         with pytest.raises(UndefinedComparison):
             Marker("'2.7.0' ~= os_name").evaluate()
+
+    def test_arbitrary_equality_on_non_version_key_is_undefined(self) -> None:
+        # ``===`` has no entry in ``_operators`` and the version-specifier path
+        # only runs for ``MARKERS_REQUIRING_VERSION`` keys, so evaluating ``===``
+        # against a non-version key raises ``UndefinedComparison``. This pins the
+        # post-#939 behavior (``packaging`` <= 25.0 evaluated it as plain string
+        # equality); see #1239.
+        for marker in ("os_name === 'posix'", "sys_platform === 'linux'"):
+            with pytest.raises(UndefinedComparison):
+                Marker(marker).evaluate()
 
     def test_allows_prerelease(self) -> None:
         assert Marker('python_full_version > "3.6.2"').evaluate(
@@ -200,6 +230,17 @@ class TestMarker:
         with pytest.raises(InvalidMarker):
             Marker(marker_string)
 
+    @pytest.mark.parametrize("line_break", ["\n", "\r", "\r\n"])
+    def test_parses_invalid_trailing_line_break(self, line_break: str) -> None:
+        with pytest.raises(InvalidMarker):
+            Marker('python_version >= "3"' + line_break)
+
+    @pytest.mark.parametrize("whitespace", [" ", "\t", " \t"])
+    def test_parses_trailing_horizontal_whitespace(self, whitespace: str) -> None:
+        assert Marker('python_version >= "3"' + whitespace) == Marker(
+            'python_version >= "3"'
+        )
+
     @pytest.mark.parametrize(
         ("marker_string", "expected"),
         [
@@ -231,6 +272,10 @@ class TestMarker:
             # Test the different quoting rules
             ("python_version == '2.7'", 'python_version == "2.7"'),
             ('python_version == "2.7"', 'python_version == "2.7"'),
+            (
+                '\'a" == os_name or python_version >= "0" or "b\' == os_name',
+                '\'a" == os_name or python_version >= "0" or "b\' == os_name',
+            ),
             # Test and/or expressions
             (
                 'python_version == "2.7" and os_name == "linux"',

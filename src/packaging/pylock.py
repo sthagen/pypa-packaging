@@ -14,7 +14,7 @@ from typing import (
     TypeVar,
     cast,
 )
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from .markers import (
     Environment,
@@ -264,7 +264,8 @@ def _url_name(url: str | None) -> str | None:
     if not url:
         return None
     url_path = urlparse(url).path
-    return url_path.rsplit("/", 1)[-1]
+    # The last path component is percent-encoded, so decode it to the file name
+    return unquote(url_path.rsplit("/", 1)[-1])
 
 
 def _validate_hashes(hashes: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -749,6 +750,7 @@ class Pylock:
         tags: Sequence[Tag] | None = None,
         extras: Collection[str] | None = None,
         dependency_groups: Collection[str] | None = None,
+        prefer_sdist_predicate: Callable[[NormalizedName], bool] | None = None,
     ) -> Iterator[
         tuple[
             Package,
@@ -770,13 +772,23 @@ class Pylock:
         The *dependency_groups* parameter represents the groups to install. If
         unspecified, the default groups are used.
 
+        The *prefer_sdist_predicate* parameter is called for packages with a source
+        distribution. If it returns ``True``, the source distribution is selected
+        before attempting wheel compatibility. If no source distribution is
+        available, wheel selection proceeds as usual without calling the predicate.
+
         This method must be used on valid Pylock instances (i.e. one obtained
         from :meth:`Pylock.from_dict` or if constructed manually, after calling
         :meth:`Pylock.validate`).
 
         .. versionadded:: 26.1
+
+        .. versionchanged:: 26.3
+            Added the *prefer_sdist_predicate* parameter.
         """
-        compatible_tags_selector = create_compatible_tags_selector(tags or sys_tags())
+        compatible_tags_selector = create_compatible_tags_selector(
+            tags if tags is not None else sys_tags()
+        )
 
         # #. Gather the extras and dependency groups to install and set ``extras`` and
         #    ``dependency_groups`` for marker evaluation, respectively.
@@ -883,6 +895,15 @@ class Pylock:
             # - Else if :ref:`pylock-packages-archive` is set:
             elif package.archive is not None:
                 yield package, package.archive
+
+            # - Else if source preference selects an available
+            #   :ref:`pylock-packages-sdist`:
+            elif (
+                package.sdist is not None
+                and prefer_sdist_predicate is not None
+                and prefer_sdist_predicate(package.name)
+            ):
+                yield package, package.sdist
 
             # - Else if there are entries for :ref:`pylock-packages-wheels`:
             elif package.wheels:
