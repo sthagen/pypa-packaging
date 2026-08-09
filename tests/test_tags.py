@@ -237,6 +237,25 @@ class TestParseTag:
     @pytest.mark.parametrize(
         "tag",
         [
+            "2-none-any",
+            "2.7.6-none-any",
+            "py3.2-none-any",
+            "py+3-none-any",
+        ],
+    )
+    def test_invalid_interpreter_raises(self, tag: str) -> None:
+        with pytest.raises(tags.InvalidTag, match="invalid interpreter"):
+            tags.parse_tag(tag)
+
+    @pytest.mark.parametrize("interpreter", ["sillywalk", "graalpy311", "_custom"])
+    def test_identifier_interpreter_is_valid(self, interpreter: str) -> None:
+        assert tags.parse_tag(f"{interpreter}-none-any") == {
+            tags.Tag(interpreter, "none", "any")
+        }
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
             "py3-none",
             "py3-none-any-extra",
         ],
@@ -1279,6 +1298,9 @@ class TestCPythonTags:
         result = list(tags.cpython_tags((3, 11), abis=["whatever"]))
         assert tags.Tag("cp311", "whatever", "plat1") in result
 
+    def test_empty_platforms(self) -> None:
+        assert list(tags.cpython_tags((3, 11), abis=["whatever"], platforms=[])) == []
+
     def test_platform_name_space_normalization(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1489,6 +1511,45 @@ class TestGenericTags:
         result = list(tags.generic_tags(interpreter="sillywalk", abis=["none"]))
         assert result == [tags.Tag("sillywalk", "none", "plat")]
 
+    def test_empty_platforms(self) -> None:
+        result = list(tags.generic_tags("sillywalk", ["abi"], []))
+        assert result == []
+
+
+class TestPurePythonTags:
+    def test_python_version(self) -> None:
+        result = list(tags.pure_python_tags((3, 3)))
+        assert result == [
+            tags.Tag("py33", "none", "any"),
+            tags.Tag("py3", "none", "any"),
+            tags.Tag("py32", "none", "any"),
+            tags.Tag("py31", "none", "any"),
+            tags.Tag("py30", "none", "any"),
+        ]
+
+    def test_major_only_python_version(self) -> None:
+        assert list(tags.pure_python_tags((3,))) == [tags.Tag("py3", "none", "any")]
+
+    def test_empty_python_version(self) -> None:
+        with pytest.raises(ValueError, match="must contain at least one item"):
+            list(tags.pure_python_tags(()))
+
+    def test_default_python_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "version_info", (3, 1))
+        assert list(tags.pure_python_tags()) == [
+            tags.Tag("py31", "none", "any"),
+            tags.Tag("py3", "none", "any"),
+            tags.Tag("py30", "none", "any"),
+        ]
+
+    def test_does_not_query_platforms(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            tags,
+            "platform_tags",
+            lambda: pytest.fail("pure_python_tags() queried the running platform"),
+        )
+        assert list(tags.pure_python_tags((3,))) == [tags.Tag("py3", "none", "any")]
+
 
 class TestCompatibleTags:
     def test_all_args(self) -> None:
@@ -1510,6 +1571,13 @@ class TestCompatibleTags:
             tags.Tag("py32", "none", "any"),
             tags.Tag("py31", "none", "any"),
             tags.Tag("py30", "none", "any"),
+        ]
+
+    def test_empty_platforms(self) -> None:
+        result = list(tags.compatible_tags((3,), "cp3", []))
+        assert result == [
+            tags.Tag("cp3", "none", "any"),
+            tags.Tag("py3", "none", "any"),
         ]
 
     def test_all_args_needs_underscore(self) -> None:

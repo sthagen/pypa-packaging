@@ -49,7 +49,6 @@ HYPOTHESIS_BINARY_ONLY = ("--only-binary", "hypothesis")
         "3.13t",
         "3.14t",
         "3.15t",
-        "pypy3.9",
         "pypy3.10",
         "pypy3.11",
     ],
@@ -186,7 +185,7 @@ PROJECTS = {
         pytest_args=("unit_test",),
     ),
     "hatchling": Project(
-        "https://github.com/pypa/hatch/archive/refs/tags/hatchling-v1.30.1.tar.gz",
+        "https://github.com/pypa/hatch/archive/refs/tags/hatchling-v1.31.0.tar.gz",
         # hatchling lives in the hatch monorepo; its backend tests rely on the
         # full hatch package and its fixtures.
         install=(
@@ -197,13 +196,16 @@ PROJECTS = {
             "filelock",
             "editables",
         ),
-        install_env={"SETUPTOOLS_SCM_PRETEND_VERSION": "1.30.1"},
+        install_env={"SETUPTOOLS_SCM_PRETEND_VERSION": "1.31.0"},
         # test_binary downloads a PyApp binary over the network.
         # See https://github.com/pypa/hatch/issues/2319.
+        # hatchling ships no pytest config, so from nox's tmp dir inside this
+        # checkout pytest makes packaging's own directory the rootdir. Node IDs
+        # then carry a .nox/... prefix, which silently breaks --deselect.
         pytest_args=(
             "tests/backend",
+            "--rootdir=.",
             "--ignore=tests/backend/builders/test_binary.py",
-            "--deselect=tests/backend/builders/test_wheel.py::TestBuildStandard::test_default_shared_scripts",
         ),
     ),
     "tox": Project(
@@ -675,7 +677,7 @@ def _bump(session: nox.Session, *, version: str, file: Path, kind: str) -> None:
 @contextlib.contextmanager
 def _replace_file(
     original_path: Path,
-) -> Generator[tuple[IO[str], IO[str]], None, None]:
+) -> Generator[tuple[IO[str], IO[str]]]:
     # Create a temporary file.
     fh, replacement_path = tempfile.mkstemp()
 
