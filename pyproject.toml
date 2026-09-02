@@ -97,10 +97,25 @@ exclude_also = [
 
 [tool.pytest.ini_options]
 minversion = "6.2"
-addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "-m", "not property"]
+addopts = [
+    "-ra",
+    "--showlocals",
+    "--strict-markers",
+    "--strict-config",
+    "-m",
+    "not property",        # property based tests opt-in only
+    "--capture=sys",       # avoids per-test fd dup2/lseek syscalls (~20% of the runtime)
+    "-p",
+    "no:logging",          # no test uses caplog and its per-test setup is measurable
+    "-p",
+    "no:threadexception",  # no threads, avoids extra gc
+    "-p",
+    "no:tmpdir",           # no usage of tempdir (mostly sans IO)
+    "-p",
+    "no:legacypath",       # no legacy paths
+]
 xfail_strict = true
 filterwarnings = ["error"]
-log_level = "INFO"
 testpaths = ["tests"]
 markers = ["property: property-based tests (opt-in)"]
 
